@@ -24,3 +24,10 @@ dist-ssr
 *.sw?
 *.zip
 
+
+# Environment files
+.env
+.env.development
+.env.local
+.env.*.local
+!.env.production
