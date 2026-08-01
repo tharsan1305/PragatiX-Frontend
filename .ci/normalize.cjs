@@ -349,6 +349,104 @@ function parseGrype(content) {
   return { findings, scanned, scanned_unit: 'sbom components' };
 }
 
+function parseViteBuild(content) {
+  const findings = [];
+  const text = content || '';
+  const lines = text.split(/\r?\n/);
+  let modules = 0;
+  let failed = /error during build|RollupError|Build failed with errors/i.test(text);
+
+  lines.forEach(line => {
+    const m = line.match(/transformed\s+(\d+)\s+modules/i);
+    if (m) modules = parseInt(m[1]);
+    if (/\berror\b/i.test(line)) {
+      failed = true;
+      findings.push({
+        id: 'vite.build.error',
+        severity: 'HIGH',
+        title: (line.trim().slice(0, 200) || 'Vite build error'),
+        file: 'dist/',
+        line: 1,
+        description: 'Vite emitted an error during the production build.',
+        remediation: 'Resolve the reported build/compile error and re-run the production build.'
+      });
+    }
+  });
+
+  if (modules === 0) modules = 1;
+  return { findings, scanned: modules, scanned_unit: 'files' };
+}
+
+function parseCoverage(content) {
+  const findings = [];
+  let scanned = 0;
+  let totalLines = 0;
+  let coveredLines = 0;
+
+  try {
+    const data = JSON.parse(content || '{}');
+    Object.keys(data).forEach(file => {
+      const f = data[file];
+      if (!f || typeof f !== 'object') return;
+      scanned++;
+      if (f.l && typeof f.l === 'object') {
+        const vals = Object.values(f.l);
+        totalLines += vals.length;
+        coveredLines += vals.filter(v => v > 0).length;
+      } else if (f.s && typeof f.s === 'object') {
+        const sm = f.statementMap || {};
+        Object.keys(f.s).forEach(k => {
+          if (sm[k] && sm[k].loc) {
+            totalLines++;
+            if (f.s[k] > 0) coveredLines++;
+          }
+        });
+      }
+    });
+  } catch (e) {}
+
+  if (scanned > 0 && totalLines > 0) {
+    const pct = Math.round((coveredLines / totalLines) * 1000) / 10;
+    if (pct < 80) {
+      findings.push({
+        id: 'coverage.threshold',
+        severity: 'MEDIUM',
+        title: `Line coverage below threshold: ${pct}%`,
+        file: 'src/',
+        line: 1,
+        description: `Vitest v8 coverage reported ${coveredLines}/${totalLines} lines covered (${pct}%). Target is 80%.`,
+        remediation: 'Add unit tests for uncovered source files to raise line coverage above 80%.'
+      });
+    }
+  }
+
+  return { findings, scanned, scanned_unit: 'files' };
+}
+
+function parseSyft(content) {
+  const findings = [];
+  let scanned = 0;
+
+  try {
+    const data = JSON.parse(content || '{}');
+    const components = data.components || [];
+    scanned = components.length;
+    if (scanned === 0) {
+      findings.push({
+        id: 'syft.empty',
+        severity: 'LOW',
+        title: 'No components identified in SBOM',
+        file: 'sbom.cdx.json',
+        line: 1,
+        description: 'Syft produced a CycloneDX SBOM with zero components.',
+        remediation: 'Verify that syft scanned the expected directories.'
+      });
+    }
+  } catch (e) {}
+
+  return { findings, scanned, scanned_unit: 'components' };
+}
+
 function parseBundlesize() {
   const findings = [];
   let totalSize = 0;
@@ -416,6 +514,12 @@ function main() {
         parsed = parseTrivy(content);
       } else if (TOOL === 'grype') {
         parsed = parseGrype(content);
+      } else if (TOOL === 'syft') {
+        parsed = parseSyft(content);
+      } else if (TOOL === 'vitebuild') {
+        parsed = parseViteBuild(content);
+      } else if (TOOL === 'coverage') {
+        parsed = parseCoverage(content);
       } else if (TOOL === 'bundlesize') {
         parsed = parseBundlesize();
       } else if (TOOL === 'viteenv') {

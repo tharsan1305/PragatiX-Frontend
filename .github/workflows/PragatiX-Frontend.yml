@@ -34,8 +34,9 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx tsc --noEmit > tsc-output.txt 2>&1 || true
-      - run: npm run build
+      - run: npm run build > vite-build-output.txt 2>&1 || true
       - run: node .ci/normalize.cjs typescript tsc-output.txt findings
+      - run: node .ci/normalize.cjs vitebuild vite-build-output.txt findings
       - run: node .ci/normalize.cjs bundlesize "" findings
       - uses: actions/upload-artifact@v4
         with:
@@ -64,6 +65,7 @@ jobs:
       - run: npm ci
       - run: npm run test:coverage || true
       - run: node .ci/normalize.cjs vitest test-report.json findings
+      - run: node .ci/normalize.cjs coverage coverage/coverage-final.json findings
       - uses: actions/upload-artifact@v4
         with:
           name: test
@@ -81,6 +83,31 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: sast
+          path: findings/
+
+  codeql:
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          build-mode: none
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:javascript-typescript"
+          output: codeql-results
+      - name: Normalize CodeQL SARIF
+        run: |
+          SARIF_FILE=$(find codeql-results -name "*.sarif" | head -n 1)
+          node .ci/normalize.cjs codeql "$SARIF_FILE" findings
+      - uses: actions/upload-artifact@v4
+        with:
+          name: codeql
           path: findings/
 
   secrets:
@@ -114,6 +141,7 @@ jobs:
       - run: |
           curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
           syft . -o cyclonedx-json=sbom.cdx.json || true
+          node .ci/normalize.cjs syft sbom.cdx.json findings
           curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin
           grype sbom:sbom.cdx.json --output json > grype.json || true
           node .ci/normalize.cjs grype grype.json findings
@@ -124,7 +152,7 @@ jobs:
 
   report:
     runs-on: ubuntu-latest
-    needs: [lint-workflows, build, code-quality, test, sast, secrets, sca]
+    needs: [lint-workflows, build, code-quality, test, sast, codeql, secrets, sca]
     if: always()
     steps:
       - uses: actions/checkout@v4
