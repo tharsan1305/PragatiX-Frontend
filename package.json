@@ -7,8 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "test": "vitest run --reporter=json --outputFile=test-report.json",
-    "test:coverage": "vitest run --coverage --coverage.reporter=json --reporter=json --outputFile=test-report.json",
+    "test": "vitest run --reporter=json --outputFile=findings/test-report.json",
+    "test:coverage": "vitest run --coverage --coverage.reporter=json --reporter=json --outputFile=findings/test-report.json",
     "preview": "vite preview"
   },
   "dependencies": {

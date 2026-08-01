@@ -36,6 +36,7 @@ dist-ssr
 findings/
 final-security-report.html
 gate-result.json
+test-report.json
 
 # Playwright
 playwright-report/

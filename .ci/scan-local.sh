@@ -29,11 +29,8 @@ node .ci/normalize.cjs oxlint findings/oxlint-output.json findings
 
 # 5. Vitest Tests
 echo "[4/7] Running Vitest..."
-npx vitest run --reporter=json --outputFile=test-report.json > /dev/null 2>&1 || true
-if [ -f test-report.json ]; then
-  mv test-report.json findings/vitest-output.json
-fi
-node .ci/normalize.cjs vitest findings/vitest-output.json findings
+npx vitest run --reporter=json --outputFile=findings/test-report.json > /dev/null 2>&1 || true
+node .ci/normalize.cjs vitest findings/test-report.json findings
 
 # 6. npm audit
 echo "[5/7] Running npm audit..."

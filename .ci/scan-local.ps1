@@ -29,11 +29,8 @@ node .ci/normalize.cjs oxlint findings/oxlint-output.json findings
 
 # 5. Vitest Tests
 Write-Host "[4/7] Running Vitest..." -ForegroundColor Yellow
-npx vitest run --reporter=json --outputFile=test-report.json > $null 2>&1
-if (Test-Path test-report.json) {
-  Move-Item test-report.json findings/vitest-output.json -Force
-}
-node .ci/normalize.cjs vitest findings/vitest-output.json findings
+npx vitest run --reporter=json --outputFile=findings/test-report.json > $null 2>&1
+node .ci/normalize.cjs vitest findings/test-report.json findings
 
 # 6. npm audit
 Write-Host "[5/7] Running npm audit..." -ForegroundColor Yellow
