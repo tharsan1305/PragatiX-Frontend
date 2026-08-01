@@ -128,7 +128,7 @@ jobs:
     if: always()
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # pin v4.1.8 to resolve GHSA-cxww-7g56-2vh6
         with:
           path: findings-download/
       - run: |
@@ -161,7 +161,7 @@ jobs:
     needs: report
     if: always()
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # pin v4.1.8 to resolve GHSA-cxww-7g56-2vh6
         with:
           name: gate-result
       - name: Evaluate Security Gate
