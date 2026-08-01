@@ -46,11 +46,14 @@ node .ci/normalize.cjs bundlesize none findings
 
 # 8. Render HTML report
 Write-Host "[7/7] Generating Consolidated HTML Report..." -ForegroundColor Yellow
+$auditDir = "security_test/12_Final_Security_Audit"
+if (!(Test-Path $auditDir)) { New-Item -ItemType Directory -Path $auditDir -Force | Out-Null }
+
 node .ci/render_report.cjs `
   findings/ `
   .ci/templates/report.html `
-  final-security-report.html `
-  gate-result.json `
+  "$auditDir/final-security-report.html" `
+  "$auditDir/gate-result.json" `
   "tharsan1305/PragatiX-Frontend" `
   "local" `
   "00000000" `
@@ -59,9 +62,15 @@ node .ci/render_report.cjs `
   $env:USERNAME `
   "local"
 
+# Sync findings to modular security_test subdirectories
+Copy-Item findings/oxlint.json security_test/01_SAST/Oxlint/oxlint-report.json -Force -ErrorAction SilentlyContinue
+Copy-Item findings/gitleaks.json security_test/02_Secrets_Scanning/Gitleaks/gitleaks-report.json -Force -ErrorAction SilentlyContinue
+Copy-Item findings/npmaudit.json security_test/03_Dependency_Scanning/Npm_Audit/npm-audit-report.json -Force -ErrorAction SilentlyContinue
+Copy-Item findings/vitest.json security_test/06_Code_Quality_and_Test_Coverage/Vitest/vitest-report.json -Force -ErrorAction SilentlyContinue
+
 $elapsed = ([DateTime]::Now - $startTime).TotalSeconds.ToString("F2")
 Write-Host "=============================================" -ForegroundColor Green
 Write-Host "  Scan completed in $elapsed seconds!" -ForegroundColor Green
-Write-Host "  Report: file:///$((Get-Item .\final-security-report.html).FullName -replace '\\','/')" -ForegroundColor Green
-Write-Host "  Gate Result: $((Get-Content .\gate-result.json -Raw))" -ForegroundColor Green
+Write-Host "  Report: file:///$((Get-Item $auditDir\final-security-report.html).FullName -replace '\\','/')" -ForegroundColor Green
+Write-Host "  Gate Result: $((Get-Content $auditDir\gate-result.json -Raw))" -ForegroundColor Green
 Write-Host "=============================================" -ForegroundColor Green

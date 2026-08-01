@@ -2,7 +2,52 @@
 
 ## Priority 1: Fix Immediately (Before Any Deployment)
 
-### Fix 1 — Remove Debug Token (HIGH-002)
+### Fix 1 — Remove All JWT from localStorage (CRIT-001)
+
+**Files:** `src/store/authContext.tsx`, `src/store/authStore.ts`, `src/features/auth/LoginPage.tsx`, `src/features/auth/pages/CaptainLoginPage.tsx`, `src/api/client.ts`
+
+**Short-term mitigation** (if `httpOnly` cookie migration is not immediately feasible):
+
+```typescript
+// src/api/client.ts — use sessionStorage as a temporary improvement
+// sessionStorage is cleared on tab close; still XSS-accessible but limits persistence
+
+export const apiClient = axios.create({
+  baseURL,
+  timeout: 30000,
+  headers: { 'Content-Type': 'application/json' },
+});
+
+apiClient.interceptors.request.use((config) => {
+  // Read from sessionStorage instead of localStorage
+  const token = sessionStorage.getItem('spdms_token');
+  const isAuthRoute = config.url?.includes('/api/v1/auth/login') ||
+                      config.url?.includes('/api/v1/auth/student-login');
+  if (token && !isAuthRoute) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+```
+
+```typescript
+// src/store/authContext.tsx — replace localStorage with sessionStorage for token
+useEffect(() => {
+  if (token) {
+    sessionStorage.setItem('spdms_token', token); // NOT localStorage
+  } else {
+    sessionStorage.removeItem('spdms_token');
+  }
+}, [token]);
+```
+
+**Long-term fix (recommended):** Migrate to `httpOnly` cookie authentication (see Priority 3, Fix 14).
+
+**Time to fix (short-term):** 45 minutes. **Time to fix (full cookie migration):** 1–2 days.
+
+---
+
+### Fix 2 — Remove Debug Token (HIGH-002)
 
 **File:** `src/features/student/tabs/DashboardTab.tsx`
 

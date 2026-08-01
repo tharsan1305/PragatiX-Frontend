@@ -22,13 +22,13 @@ A robust Content Security Policy is defined via `meta` tag in [index.html](file:
 ---
 
 ## 3. Cross-Site Scripting (XSS) Mitigation
-* **React Native Escaping**: All variables rendered in JSX (e.g. `{studentName}`) are auto-escaped by React before rendering.
-* **Risky Operations Policy**: The use of `dangerouslySetInnerHTML` is prohibited unless content is explicitly sanitized via a library like `DOMPurify`.
+* **React Auto Escaping**: All variables rendered in JSX (e.g. `{studentName}`) are auto-escaped by React before rendering.
+* **Risky Operations Policy**: The use of `dangerouslySetInnerHTML` is prohibited unless content is explicitly sanitized via `DOMPurify`.
 
 ---
 
 ## 4. Secure Transport & Headers
-In production, the application is deployed behind an AWS CloudFront/S3 distribution utilizing HTTPS:
-* **Strict-Transport-Security (HSTS)**: Configured at the CDN level.
+In production, the application is deployed behind CloudFront/S3 or Nginx utilizing HTTPS:
+* **Strict-Transport-Security (HSTS)**: Configured at the CDN/Server level.
 * **X-Content-Type-Options**: Explicitly configured as `nosniff` in `index.html`.
 * **Referrer Policy**: Strict-origin-when-cross-origin.

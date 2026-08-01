@@ -24,16 +24,21 @@ const CATEGORIES = {
   typescript: 'TYPES',
   bundlesize: 'BUILD',
   oxlint: 'LINT',
+  eslint: 'LINT',
   vitest: 'Tests',
   coverage: 'Coverage',
+  playwright: 'Tests',
+  deps: 'SCA',
   semgrep: 'SAST',
   codeql: 'SAST',
+  scorecard: 'SCA',
   gitleaks: 'Secrets',
   viteenv: 'Secrets',
   npmaudit: 'SCA',
   trivy: 'SCA',
   grype: 'SCA',
-  syft: 'SBOM'
+  syft: 'SBOM',
+  zap: 'DAST'
 };
 
 const DISPLAY_NAMES = {
@@ -42,16 +47,21 @@ const DISPLAY_NAMES = {
   typescript: 'TypeScript',
   bundlesize: 'bundlesize',
   oxlint: 'oxlint',
+  eslint: 'ESLint (security plugins)',
   vitest: 'Vitest',
   coverage: 'c8/v8 coverage',
+  playwright: 'Playwright E2E',
+  deps: 'npm outdated',
   semgrep: 'Semgrep',
   codeql: 'GitHub CodeQL',
+  scorecard: 'OpenSSF Scorecard',
   gitleaks: 'Gitleaks',
   viteenv: 'Vite Env Leak Checker',
   npmaudit: 'npm audit',
   trivy: 'Trivy fs',
   grype: 'Grype',
-  syft: 'Syft'
+  syft: 'Syft',
+  zap: 'OWASP ZAP'
 };
 
 function readInput(filepath) {
@@ -284,6 +294,40 @@ function parseNpmAudit(content) {
   return { findings, scanned, scanned_unit: 'dependencies' };
 }
 
+function parseDeps(content) {
+  const findings = [];
+  let scanned = 0;
+
+  try {
+    const data = JSON.parse(content || '{}');
+    const pkgs = Object.keys(data);
+    scanned = pkgs.length || 1;
+    pkgs.forEach(pkgName => {
+      const info = data[pkgName];
+      if (!info || typeof info !== 'object') return;
+      const current = info.current || 'unknown';
+      const wanted = info.wanted || 'unknown';
+      const latest = info.latest || wanted;
+      if (current === latest) return;
+
+      findings.push({
+        id: 'npm.outdated',
+        severity: 'LOW',
+        title: `Outdated dependency: ${pkgName}`,
+        file: 'package.json',
+        line: 1,
+        description: `${pkgName} is behind: installed ${current}, wanted ${wanted}, latest ${latest}.`,
+        remediation: `Run: npm install ${pkgName}@${latest}`,
+        package: pkgName,
+        installed_version: current,
+        fixed_version: latest
+      });
+    });
+  } catch (e) {}
+
+  return { findings, scanned, scanned_unit: 'dependencies' };
+}
+
 function parseTrivy(content) {
   const findings = [];
   let scanned = 0;
@@ -485,6 +529,144 @@ function parseBundlesize() {
   return { findings, scanned: fileCount || 1, scanned_unit: 'files' };
 }
 
+function parseEslint(content) {
+  const findings = [];
+  let scanned = 0;
+
+  try {
+    const data = JSON.parse(content || '[]');
+    if (Array.isArray(data)) {
+      scanned = data.length;
+      data.forEach(file => {
+        if (!file.messages || file.messages.length === 0) return;
+        file.messages.forEach(msg => {
+          const severityMap = { 2: 'HIGH', 1: 'MEDIUM' };
+          const severity = severityMap[msg.severity] || 'MEDIUM';
+          const rule = msg.ruleId || 'eslint.security';
+          const filePath = (file.filePath || 'unknown').replace(/\\/g, '/');
+
+          findings.push({
+            id: rule,
+            severity: severity,
+            title: msg.message || 'ESLint security finding',
+            file: filePath,
+            line: msg.line || 1,
+            column: msg.column || 1,
+            code_snippet: '',
+            description: `Rule '${rule}' reported a potential security or accessibility issue.`,
+            remediation: `Address the ESLint rule '${rule}' in the flagged source file.`
+          });
+        });
+      });
+    }
+  } catch (e) {}
+
+  return { findings, scanned: scanned || 1, scanned_unit: 'files' };
+}
+
+function parseScorecard(content) {
+  const findings = [];
+  let scanned = 0;
+
+  try {
+    const data = JSON.parse(content || '{}');
+    const checks = data.checks || [];
+    scanned = checks.length || 1;
+
+    const failing = checks.filter(c => c.score !== undefined && c.score < 7);
+    failing.forEach(c => {
+      const score = c.score !== undefined ? `${c.score}/10` : 'n/a';
+      findings.push({
+        id: `scorecard.${c.name}`,
+        severity: c.score < 3 ? 'HIGH' : 'MEDIUM',
+        title: `Scorecard check below threshold: ${c.name} (${score})`,
+        file: '.github/',
+        line: 1,
+        description: `OpenSSF Scorecard check '${c.name}' scored ${score}. ${
+          c.documentation?.short || c.reason || 'See scorecard documentation.'
+        }`,
+        remediation: c.documentation?.short
+          ? `${c.documentation.short}. ${c.documentation.url || ''}`
+          : `Improve repository posture for the '${c.name}' check.`
+      });
+    });
+  } catch (e) {}
+
+  return { findings, scanned: scanned || 1, scanned_unit: 'checks' };
+}
+
+function parsePlaywright(content) {
+  const findings = [];
+  let scanned = 0;
+
+  try {
+    const data = JSON.parse(content || '{}');
+    if (data.stats) {
+      scanned = (data.stats.expected || 0) + (data.stats.unexpected || 0);
+    }
+    const suites = data.suites || [];
+    const walk = (s) => {
+      (s.suites || []).forEach(walk);
+      (s.specs || []).forEach(spec => {        (spec.tests || []).forEach(t => {
+          const fail = (t.results || []).filter(r => r.status !== 'passed' && r.status !== 'skipped' && r.status !== 'interrupted');
+          fail.forEach(r => {
+            const err = (r.errors || [])[0] || {};
+            const loc = spec.line !== undefined ? spec.line : 1;
+            findings.push({
+              id: 'playwright.failure',
+              severity: 'HIGH',
+              title: `E2E test failed: ${spec.title}`,
+              file: spec.file || 'e2e/',
+              line: loc,
+              description: err.message || `Playwright test '${spec.title}' did not pass.`,
+              remediation: 'Fix the UI behavior or test assertion; re-run E2E suite.'
+            });
+          });
+        });
+      });
+    };
+    walk({ suites });
+  } catch (e) {}
+
+  return { findings, scanned: scanned || 1, scanned_unit: 'tests' };
+}
+
+function parseZap(content) {
+  const findings = [];
+  let scanned = 0;
+
+  try {
+    const data = JSON.parse(content || '{}');
+    const site = (data.site || [])[0] || {};
+    scanned = (site.alerts || []).length || 1;
+
+    const levelMap = {
+      0: 'INFO', 1: 'LOW', 2: 'MEDIUM', 3: 'HIGH', 4: 'CRITICAL'
+    };
+
+    (site.alerts || []).forEach(alert => {
+      const riskCode = typeof alert.riskcode === 'string' ? parseInt(alert.riskcode) : alert.riskcode;
+      const confidenceCode = typeof alert.confidence === 'string' ? parseInt(alert.confidence) : alert.confidence;
+      const severity = levelMap[riskCode] || 'MEDIUM';
+      const confidence = confidenceCode === 3 ? 'High' : confidenceCode === 2 ? 'Medium' : confidenceCode === 1 ? 'Low' : 'Unknown';
+      const instance = (alert.instances || [])[0] || {};
+
+      findings.push({
+        id: `zap.${alert.alert_ref || alert.alert || 'finding'}`,
+        severity: severity,
+        title: alert.alert || 'ZAP finding',
+        file: instance.uri || '/',
+        line: 1,
+        code_snippet: instance.evidence || '',
+        description: `ZAP (${confidence} confidence) reported: ${alert.desc || alert.alert || ''}`,
+        remediation: alert.solution || 'Review OWASP ZAP guidance for remediation of this finding.'
+      });
+    });
+  } catch (e) {}
+
+  return { findings, scanned: scanned || 1, scanned_unit: 'alerts' };
+}
+
 function main() {
   const startTime = Date.now();
   let content = readInput(INPUT_FILE);
@@ -510,12 +692,22 @@ function main() {
         parsed = parseGitleaks(content);
       } else if (TOOL === 'npmaudit') {
         parsed = parseNpmAudit(content);
+      } else if (TOOL === 'deps') {
+        parsed = parseDeps(content);
       } else if (TOOL === 'trivy') {
         parsed = parseTrivy(content);
       } else if (TOOL === 'grype') {
         parsed = parseGrype(content);
       } else if (TOOL === 'syft') {
         parsed = parseSyft(content);
+      } else if (TOOL === 'eslint') {
+        parsed = parseEslint(content);
+      } else if (TOOL === 'scorecard') {
+        parsed = parseScorecard(content);
+      } else if (TOOL === 'playwright') {
+        parsed = parsePlaywright(content);
+      } else if (TOOL === 'zap') {
+        parsed = parseZap(content);
       } else if (TOOL === 'vitebuild') {
         parsed = parseViteBuild(content);
       } else if (TOOL === 'coverage') {

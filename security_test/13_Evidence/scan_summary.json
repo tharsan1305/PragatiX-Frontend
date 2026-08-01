@@ -1,0 +1,9 @@
+{
+  "project": "PragatiX-Frontend",
+  "verdict": "PASS",
+  "score": 100,
+  "toolsExecuted": 13,
+  "criticalVulnerabilities": 0,
+  "highVulnerabilities": 0,
+  "status": "APPROVED_FOR_RELEASE"
+}

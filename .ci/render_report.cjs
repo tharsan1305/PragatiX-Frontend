@@ -31,16 +31,21 @@ const EXPECTED_TOOLS = [
   { id: 'typescript', name: 'TypeScript', category: 'TYPES' },
   { id: 'bundlesize', name: 'bundlesize', category: 'BUILD' },
   { id: 'oxlint', name: 'oxlint', category: 'LINT' },
+  { id: 'eslint', name: 'ESLint (security plugins)', category: 'LINT' },
   { id: 'vitest', name: 'Vitest', category: 'Tests' },
   { id: 'coverage', name: 'c8/v8 coverage', category: 'Coverage' },
+  { id: 'playwright', name: 'Playwright E2E', category: 'Tests' },
+  { id: 'deps', name: 'npm outdated', category: 'SCA' },
   { id: 'semgrep', name: 'Semgrep', category: 'SAST' },
   { id: 'codeql', name: 'GitHub CodeQL', category: 'SAST' },
+  { id: 'scorecard', name: 'OpenSSF Scorecard', category: 'SCA' },
   { id: 'gitleaks', name: 'Gitleaks', category: 'Secrets' },
   { id: 'viteenv', name: 'Vite Env Leak Checker', category: 'Secrets' },
   { id: 'npmaudit', name: 'npm audit', category: 'SCA' },
   { id: 'trivy', name: 'Trivy fs', category: 'SCA' },
   { id: 'grype', name: 'Grype', category: 'SCA' },
-  { id: 'syft', name: 'Syft', category: 'SBOM' }
+  { id: 'syft', name: 'Syft', category: 'SBOM' },
+  { id: 'zap', name: 'OWASP ZAP', category: 'DAST' }
 ];
 
 const DEDUCTIONS = { CRITICAL: 25, HIGH: 10, MEDIUM: 3, LOW: 1, INFO: 0 };

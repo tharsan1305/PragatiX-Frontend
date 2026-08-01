@@ -37,3 +37,8 @@ findings/
 final-security-report.html
 gate-result.json
 
+# Playwright
+playwright-report/
+test-results/
+playwright/.cache/
+

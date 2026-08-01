@@ -1,0 +1,9 @@
+{
+  "tool": "oxlint",
+  "category": "LINT",
+  "status": "PASS",
+  "scanned": 1,
+  "scanned_unit": "files",
+  "duration_seconds": 0,
+  "findings": []
+}

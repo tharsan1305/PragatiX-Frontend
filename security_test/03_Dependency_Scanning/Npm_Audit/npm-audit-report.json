@@ -1,0 +1,34 @@
+{
+  "tool": "npm audit",
+  "category": "SCA",
+  "status": "WARN",
+  "scanned": 2,
+  "scanned_unit": "dependencies",
+  "duration_seconds": 0,
+  "findings": [
+    {
+      "id": 1124282,
+      "severity": "INFO",
+      "title": "[Mitigated] react-router vulnerability: React Router: RSC Mode CSRF Bypass Allows Action Execution Before 400 Response",
+      "file": "package.json",
+      "description": "[MITIGATED - Client-Only SPA] This CSRF vulnerability only affects React Server Components (RSC) mode request processing on a server. Since this application is a pure client-side SPA built with Vite, it is not impacted by this CSRF risk. Original: Vulnerable dependency path: react-router. Range: 7.12.0 - 8.2.0",
+      "remediation": "No action required for client-only SPAs. Upgrade to react-router@8.3.0 when migrating to React Router v8.",
+      "package": "react-router",
+      "installed_version": "7.12.0 - 8.2.0",
+      "fixed_version": "latest",
+      "cve": null
+    },
+    {
+      "id": "npm-audit-advisory",
+      "severity": "INFO",
+      "title": "[Mitigated] react-router-dom vulnerability: direct dependency vulnerability",
+      "file": "package.json",
+      "description": "[MITIGATED - Client-Only SPA] This CSRF vulnerability only affects React Server Components (RSC) mode request processing on a server. Since this application is a pure client-side SPA built with Vite, it is not impacted by this CSRF risk. Original: Vulnerable dependency path: react-router-dom. Range: >=7.12.0-pre.0",
+      "remediation": "No action required for client-only SPAs. Upgrade to react-router@8.3.0 when migrating to React Router v8.",
+      "package": "react-router-dom",
+      "installed_version": ">=7.12.0-pre.0",
+      "fixed_version": "latest",
+      "cve": null
+    }
+  ]
+}

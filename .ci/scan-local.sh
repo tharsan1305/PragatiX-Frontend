@@ -46,11 +46,14 @@ node .ci/normalize.cjs bundlesize none findings
 
 # 8. Render HTML report
 echo "[7/7] Generating Consolidated HTML Report..."
+AUDIT_DIR="security_test/12_Final_Security_Audit"
+mkdir -p "$AUDIT_DIR"
+
 node .ci/render_report.cjs \
   findings/ \
   .ci/templates/report.html \
-  final-security-report.html \
-  gate-result.json \
+  "$AUDIT_DIR/final-security-report.html" \
+  "$AUDIT_DIR/gate-result.json" \
   "tharsan1305/PragatiX-Frontend" \
   "local" \
   "00000000" \
@@ -59,9 +62,16 @@ node .ci/render_report.cjs \
   "$USER" \
   "local"
 
-ELAPSED=$(($(date +%s) - START_TIME))
+# Sync findings to modular security_test subdirectories
+cp findings/oxlint.json security_test/01_SAST/Oxlint/oxlint-report.json 2>/dev/null || true
+cp findings/gitleaks.json security_test/02_Secrets_Scanning/Gitleaks/gitleaks-report.json 2>/dev/null || true
+cp findings/npmaudit.json security_test/03_Dependency_Scanning/Npm_Audit/npm-audit-report.json 2>/dev/null || true
+cp findings/vitest.json security_test/06_Code_Quality_and_Test_Coverage/Vitest/vitest-report.json 2>/dev/null || true
+
+END_TIME=$(date +%s)
+ELAPSED=$((END_TIME - START_TIME))
 echo "============================================="
-echo "  Scan completed in $ELAPSED seconds!"
-echo "  Report: file://$(pwd)/final-security-report.html"
-echo "  Gate Result: $(cat gate-result.json)"
+echo "  Scan completed in ${ELAPSED} seconds!"
+echo "  Report: $AUDIT_DIR/final-security-report.html"
+echo "  Gate Result: $(cat $AUDIT_DIR/gate-result.json)"
 echo "============================================="
