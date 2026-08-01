@@ -1,0 +1,180 @@
+name: PragatiX-Frontend
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-workflows:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: actionlint
+        run: |
+          bash <(curl -s https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          ./actionlint > actionlint-output.txt || true
+          node .ci/normalize.cjs actionlint actionlint-output.txt findings
+      - uses: actions/upload-artifact@v4
+        with:
+          name: actionlint
+          path: findings/
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx tsc --noEmit > tsc-output.txt 2>&1 || true
+      - run: npm run build
+      - run: node .ci/normalize.cjs typescript tsc-output.txt findings
+      - run: node .ci/normalize.cjs bundlesize "" findings
+      - uses: actions/upload-artifact@v4
+        with:
+          name: build
+          path: findings/
+
+  code-quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npx oxlint --format=json > oxlint-output.json || true
+      - run: node .ci/normalize.cjs oxlint oxlint-output.json findings
+      - uses: actions/upload-artifact@v4
+        with:
+          name: code-quality
+          path: findings/
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run test:coverage || true
+      - run: node .ci/normalize.cjs vitest test-report.json findings
+      - uses: actions/upload-artifact@v4
+        with:
+          name: test
+          path: findings/
+
+  sast:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Semgrep
+        run: |
+          python3 -m pip install semgrep
+          semgrep scan --config auto --sarif --output semgrep.sarif || true
+          node .ci/normalize.cjs semgrep semgrep.sarif findings
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sast
+          path: findings/
+
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Gitleaks
+        run: |
+          curl -sSLo gitleaks.tar.gz https://github.com/gitleaks/gitleaks/releases/download/v8.18.2/gitleaks_8.18.2_linux_x64.tar.gz
+          tar -xzf gitleaks.tar.gz
+          ./gitleaks detect --report-path gitleaks.json --exit-code 0 || true
+          node .ci/normalize.cjs gitleaks gitleaks.json findings
+      - name: Vite Env Leak Check
+        run: |
+          node .ci/check-vite-env.cjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: secrets
+          path: findings/
+
+  sca:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm audit --json > npm-audit.json || true
+      - run: node .ci/normalize.cjs npmaudit npm-audit.json findings
+      - run: |
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+          trivy fs --format json -o trivy.json . || true
+          node .ci/normalize.cjs trivy trivy.json findings
+      - run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+          syft . -o cyclonedx-json=sbom.cdx.json || true
+          curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin
+          grype sbom:sbom.cdx.json --output json > grype.json || true
+          node .ci/normalize.cjs grype grype.json findings
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sca
+          path: findings/
+
+  report:
+    runs-on: ubuntu-latest
+    needs: [lint-workflows, build, code-quality, test, sast, secrets, sca]
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: findings-download/
+      - run: |
+          mkdir -p findings
+          find findings-download -name "*.json" -exec cp {} findings/ \;
+      - run: |
+          node .ci/render_report.cjs \
+            findings/ \
+            .ci/templates/report.html \
+            final-security-report.html \
+            gate-result.json \
+            "${{ github.repository }}" \
+            "${{ github.ref_name }}" \
+            "${{ github.sha }}" \
+            "${{ github.run_id }}" \
+            "${{ github.run_number }}" \
+            "${{ github.actor }}" \
+            "${{ github.event_name }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: final-security-report
+          path: final-security-report.html
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gate-result
+          path: gate-result.json
+
+  gate:
+    runs-on: ubuntu-latest
+    needs: report
+    if: always()
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: gate-result
+      - name: Evaluate Security Gate
+        run: |
+          PASS=$(node -e "console.log(JSON.parse(fs.readFileSync('gate-result.json', 'utf8')).pass)")
+          SCORE=$(node -e "console.log(JSON.parse(fs.readFileSync('gate-result.json', 'utf8')).score)")
+          REASONS=$(node -e "console.log(JSON.parse(fs.readFileSync('gate-result.json', 'utf8')).reasons.join('\n'))")
+          echo "Security Gate Score: $SCORE/100"
+          if [ "$PASS" != "true" ]; then
+            echo "Security Gate FAILED!"
+            echo "Reasons:"
+            echo "$REASONS"
+            exit 1
+          else
+            echo "Security Gate PASSED!"
+          fi
