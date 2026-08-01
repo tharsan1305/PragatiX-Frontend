@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Lock, Unlock, CheckCircle, Clock, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react';
-import { useAuth } from '../../../store/authContext';
+import { useAuth } from '../../../contexts/authContext';
 import { useXpStore } from '../../../store/xpStore';
 import apiClient from '../../../services/apiClient';
 

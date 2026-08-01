@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { LogOut, Shield, KeyRound, X } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { useAuth } from '../../../store/authContext';
+import { useAuth } from '../../../contexts/authContext';
 import apiClient from '../../../services/apiClient';
 import { useNavigate } from 'react-router-dom';
 import LogoutModal from '../../../components/common/LogoutModal';

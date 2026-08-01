@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Trophy, Shield, Stars, Users, Activity, TrendingUp } from 'lucide-react';
 import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-import { useAuth } from '../../../store/authContext';
+import { useAuth } from '../../../contexts/authContext';
 import { useXpStore } from '../../../store/xpStore';
 import apiClient from '../../../services/apiClient';
 

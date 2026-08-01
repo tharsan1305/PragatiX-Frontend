@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Lock, User, ShieldAlert } from 'lucide-react';
-import { useAuth } from '../../store/authContext';
+import { useAuth } from '../../contexts/authContext';
 import { authService } from './services/auth.service';
 
 import logoImg from '../../assets/logo.jpg';

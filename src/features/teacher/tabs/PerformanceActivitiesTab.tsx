@@ -6,7 +6,7 @@ import {
   ArrowLeft, Search, UsersRound
 } from 'lucide-react';
 import apiClient from '../../../services/apiClient';
-import { useAuth } from '../../../store/authContext';
+import { useAuth } from '../../../contexts/authContext';
 
 const CATEGORY_STYLES: Record<string, any> = {
   "ACADEMIC": { color: "text-blue-600", bg: "bg-blue-100", icon: School, label: "Academic" },

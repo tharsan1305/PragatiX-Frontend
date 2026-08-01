@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import Footer from '../../components/common/Footer';
-import { useAuth } from '../../store/authContext';
+import { useAuth } from '../../contexts/authContext';
 import apiClient from '../../services/apiClient';
 import PerformanceActivitiesTab from './tabs/PerformanceActivitiesTab';
 import ActivityTab from './tabs/ActivityTab';

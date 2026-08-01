@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Lock, Check, Zap, ShieldCheck, HelpCircle, Clock, Plus, X } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { useAuth } from '../../../store/authContext';
+import { useAuth } from '../../../contexts/authContext';
 import apiClient from '../../../services/apiClient';
 
 const LEVELS = [

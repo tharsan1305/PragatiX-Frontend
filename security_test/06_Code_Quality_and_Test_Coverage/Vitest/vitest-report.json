@@ -2,7 +2,7 @@
   "tool": "Vitest",
   "category": "Tests",
   "status": "PASS",
-  "scanned": 7,
+  "scanned": 5,
   "scanned_unit": "tests",
   "duration_seconds": 0,
   "findings": []
