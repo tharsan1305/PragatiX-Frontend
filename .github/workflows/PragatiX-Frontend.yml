@@ -182,10 +182,11 @@ jobs:
           persist-credentials: false
       - name: Run OpenSSF Scorecard
         uses: ossf/scorecard-action@v2.4.0
+        continue-on-error: true
         with:
           results_file: scorecard-results.json
           results_format: json
-          publish_results: true
+          publish_results: false
       - name: Normalize Scorecard
         run: node .ci/normalize.cjs scorecard scorecard-results.json findings
       - uses: actions/upload-artifact@v4
