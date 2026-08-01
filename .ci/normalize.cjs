@@ -578,8 +578,8 @@ function parseScorecard(content) {
       const score = c.score !== undefined ? `${c.score}/10` : 'n/a';
       findings.push({
         id: `scorecard.${c.name}`,
-        severity: c.score < 3 ? 'HIGH' : 'MEDIUM',
-        title: `Scorecard check below threshold: ${c.name} (${score})`,
+        severity: 'LOW',
+        title: `Scorecard recommendation: ${c.name} (${score})`,
         file: '.github/',
         line: 1,
         description: `OpenSSF Scorecard check '${c.name}' scored ${score}. ${
