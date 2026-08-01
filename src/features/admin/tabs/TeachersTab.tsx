@@ -1,0 +1,426 @@
+import { useState, useEffect } from 'react';
+import { Search, Plus, Edit2, Trash2, ArrowLeft, RefreshCw, X } from 'lucide-react';
+import toast from 'react-hot-toast';
+import apiClient from '../../../services/apiClient';
+import ConfirmationModal from '../../../components/common/ConfirmationModal';
+
+interface Props {
+  onBack?: () => void;
+}
+
+export default function TeachersTab({ onBack }: Props) {
+  const [users, setUsers] = useState<any[]>([]);
+  const [filteredUsers, setFilteredUsers] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Lookups
+  const [lookups, setLookups] = useState({
+    departments: [] as any[],
+    roles: [] as any[],
+    subjects: [] as any[],
+  });
+
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<any>(null);
+  
+  const [formData, setFormData] = useState({
+    username: '', password: '', fullName: '', email: '', 
+    departmentId: '', mainRole: 'ROLE_TEACHER', subRoles: [] as string[],
+    section: '', year: '', subjectIds: [] as number[]
+  });
+
+  useEffect(() => {
+    fetchLookups();
+    fetchUsers();
+  }, []);
+
+  const fetchLookups = async () => {
+    try {
+      const [deptRes, roleRes, subjRes] = await Promise.all([
+        apiClient.get('/api/v1/admin/departments'),
+        apiClient.get('/api/v1/admin/roles'),
+        apiClient.get('/api/v1/admin/subjects')
+      ]);
+
+      setLookups({
+        departments: deptRes.data?.data || [],
+        roles: roleRes.data?.data || [{name: 'ROLE_ADMIN'}, {name: 'ROLE_TEACHER'}, {name: 'ROLE_STUDENT'}],
+        subjects: subjRes.data?.data || []
+      });
+    } catch (e) {
+      console.error(e);
+      // Fallback roles if API fails
+      setLookups(prev => ({ ...prev, roles: [{name: 'ROLE_ADMIN'}, {name: 'ROLE_TEACHER'}, {name: 'ROLE_STUDENT'}] }));
+    }
+  };
+
+  const fetchUsers = async () => {
+    setIsLoading(true);
+    try {
+      const response = await apiClient.get('/api/v1/admin/users');
+      if (response.data?.success) {
+        const allUsers = response.data.data || [];
+        // Filter out students to show only staff/teachers in this tab
+        const staff = allUsers.filter((u: any) => !u.roles?.includes('ROLE_STUDENT'));
+        setUsers(staff);
+        setFilteredUsers(staff);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const query = e.target.value.toLowerCase();
+    setSearchQuery(query);
+    if (!query) {
+      setFilteredUsers(users);
+    } else {
+      setFilteredUsers(users.filter(u => 
+        (u.fullName || '').toLowerCase().includes(query) ||
+        (u.username || '').toLowerCase().includes(query) ||
+        (u.email || '').toLowerCase().includes(query)
+      ));
+    }
+  };
+
+  const openModal = (user: any = null) => {
+    setEditingUser(user);
+    if (user) {
+      const roles = user.roles || [];
+      const mainRole = roles.includes('ROLE_TEACHER') ? 'ROLE_TEACHER' : (roles[0] || 'ROLE_TEACHER');
+      const subRoles = roles.filter((r: string) => r !== mainRole);
+      
+      const matchedDept = lookups.departments.find(d => d.name === user.departmentName);
+      const matchedDeptId = matchedDept ? matchedDept.id.toString() : (user.departmentId ? user.departmentId.toString() : '');
+
+      setFormData({
+        username: user.username || '',
+        password: '',
+        fullName: user.fullName || '',
+        email: user.email || '',
+        departmentId: matchedDeptId,
+        mainRole: mainRole,
+        subRoles: subRoles,
+        section: user.section || '',
+        year: user.year || '',
+        subjectIds: user.subjects?.map((s: any) => s.id) || []
+      });
+    } else {
+      setFormData({
+        username: '', password: '', fullName: '', email: '', 
+        departmentId: '', mainRole: 'ROLE_TEACHER', subRoles: [],
+        section: '', year: '', subjectIds: []
+      });
+    }
+    setIsModalOpen(true);
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const toastId = toast.loading("Saving teacher...");
+    try {
+      const rolesToSubmit = [formData.mainRole, ...formData.subRoles];
+      
+      const payload = {
+        ...formData,
+        departmentId: formData.departmentId ? parseInt(formData.departmentId) : null,
+        roles: rolesToSubmit,
+        subjectIds: formData.subjectIds
+      };
+      
+      if (editingUser) {
+        if (!payload.password) delete (payload as any).password;
+        await apiClient.put(`/api/v1/admin/users/${editingUser.id}`, payload);
+      } else {
+        await apiClient.post('/api/v1/admin/users', payload);
+      }
+      toast.dismiss(toastId);
+      toast.success("User saved successfully");
+      setIsModalOpen(false);
+      fetchUsers();
+    } catch (e: any) {
+      toast.dismiss(toastId);
+      console.error(e);
+      toast.error(e.response?.data?.message || 'Failed to save user.');
+    }
+  };
+
+  const [deleteConfirmModal, setDeleteConfirmModal] = useState<{ open: boolean; userId: number | null; username: string }>({
+    open: false,
+    userId: null,
+    username: ''
+  });
+
+  const triggerDelete = (id: number, name: string) => {
+    setDeleteConfirmModal({
+      open: true,
+      userId: id,
+      username: name
+    });
+  };
+
+  const confirmDeleteUser = async () => {
+    const { userId, username } = deleteConfirmModal;
+    if (!userId) return;
+
+    setDeleteConfirmModal({ open: false, userId: null, username: '' });
+    const toastId = toast.loading(`Deleting ${username}...`);
+    try {
+      await apiClient.delete(`/api/v1/admin/users/${userId}`);
+      toast.dismiss(toastId);
+      toast.success("User deleted successfully");
+      fetchUsers();
+    } catch (e: any) {
+      toast.dismiss(toastId);
+      console.error(e);
+      toast.error(e.response?.data?.message || 'Failed to delete user.');
+    }
+  };
+
+  const toggleSubRole = (role: string) => {
+    setFormData(prev => {
+      const exists = prev.subRoles.includes(role);
+      if (exists) {
+        return { ...prev, subRoles: prev.subRoles.filter(r => r !== role) };
+      } else {
+        return { ...prev, subRoles: [...prev.subRoles, role] };
+      }
+    });
+  };
+
+  const toggleSubject = (id: number) => {
+    setFormData(prev => {
+      const exists = prev.subjectIds.includes(id);
+      if (exists) {
+        return { ...prev, subjectIds: prev.subjectIds.filter(s => s !== id) };
+      } else {
+        return { ...prev, subjectIds: [...prev.subjectIds, id] };
+      }
+    });
+  };
+
+  return (
+    <div className="flex flex-col min-h-full bg-slate-50 relative pb-20">
+      <div className="bg-slate-900 px-6 pt-12 pb-4 shadow-md z-10">
+        <div className="flex items-center space-x-4 mb-2">
+          {onBack && (
+            <button onClick={onBack} className="p-2 bg-slate-800 rounded-full text-white hover:bg-slate-700 transition-colors">
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+          )}
+          <h1 className="text-2xl font-bold text-white flex-1">Staff Management</h1>
+        </div>
+      </div>
+
+      <div className="flex-1 p-4 md:p-6 max-w-5xl mx-auto w-full">
+        <div className="mb-6 relative">
+          <Search className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input 
+            type="text" 
+            placeholder="Search staff by name, username..." 
+            value={searchQuery}
+            onChange={handleSearch}
+            className="w-full pl-12 pr-10 py-3.5 bg-white border border-slate-200 rounded-xl text-slate-800 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm"
+          />
+          {searchQuery && (
+            <button 
+              onClick={() => { setSearchQuery(''); setFilteredUsers(users); }}
+              className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+        {isLoading ? (
+          <div className="flex justify-center py-20">
+            <RefreshCw className="w-8 h-8 animate-spin text-slate-400" />
+          </div>
+        ) : filteredUsers.length === 0 ? (
+          <div className="text-center py-10 text-slate-500 bg-white rounded-xl shadow-sm border border-slate-200">
+            No staff found.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {filteredUsers.map(user => (
+              <div key={user.id} className="bg-white rounded-xl shadow-sm border border-slate-100 p-2 flex items-center justify-between hover:shadow-md transition-shadow">
+                <div className="flex items-center space-x-4 pl-2">
+                  <div className="w-10 h-10 bg-green-50 rounded-full flex items-center justify-center text-green-600 font-bold text-lg">
+                    {user.fullName ? user.fullName[0].toUpperCase() : 'U'}
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-slate-900 text-[15px]">{user.fullName || user.username}</h3>
+                    <p className="text-xs font-medium text-slate-500">{user.email || 'No Email'} • {user.department?.name || 'No Dept'}</p>
+                    <div className="mt-1.5 flex flex-wrap gap-1">
+                      {(user.roles || []).map((r: string) => (
+                        <span key={r} className="px-1.5 py-0.5 bg-slate-100 text-slate-600 text-[9px] font-bold rounded uppercase tracking-wider">
+                          {r.replace('ROLE_', '')}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex space-x-1 pr-2">
+                  <button onClick={() => openModal(user)} className="p-2.5 text-blue-600 hover:bg-blue-50 rounded-full transition-colors">
+                    <Edit2 className="w-4 h-4" />
+                  </button>
+                  <button onClick={() => triggerDelete(user.id, user.fullName || user.username)} className="p-2.5 text-red-500 hover:bg-red-50 rounded-full transition-colors">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* FAB Add Button */}
+      <div className="fixed bottom-6 right-6 z-40">
+        <button 
+          onClick={() => openModal()}
+          className="w-14 h-14 bg-slate-900 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-slate-800 hover:scale-105 transition-all"
+        >
+          <Plus className="w-6 h-6" />
+        </button>
+      </div>
+
+      {/* Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto flex flex-col shadow-2xl">
+            <div className="p-6 pb-4">
+              <h2 className="text-[17px] font-bold text-slate-900 mb-1">
+                {editingUser ? `Edit User: ${editingUser.username}` : 'Create New User'}
+              </h2>
+            </div>
+            
+            <form onSubmit={handleSave} className="px-6 pb-6 space-y-4">
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="text-xs font-semibold text-slate-600 mb-1 block">Full Name *</label>
+                  <input required type="text" value={formData.fullName} onChange={e => setFormData({...formData, fullName: e.target.value})} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 outline-none text-sm" />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-600 mb-1 block">Email *</label>
+                  <input required type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 outline-none text-sm" />
+                </div>
+                {!editingUser && (
+                  <>
+                    <div>
+                      <label className="text-xs font-semibold text-slate-600 mb-1 block">Username *</label>
+                      <input required type="text" value={formData.username} onChange={e => setFormData({...formData, username: e.target.value})} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 outline-none text-sm" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-slate-600 mb-1 block">Password *</label>
+                      <input required type="text" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 outline-none text-sm" />
+                    </div>
+                  </>
+                )}
+                
+                <div className="pt-2">
+                  <label className="text-xs font-semibold text-slate-600 mb-1 block">Department</label>
+                  <select value={formData.departmentId} onChange={e => setFormData({...formData, departmentId: e.target.value})} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 outline-none bg-white text-sm">
+                    <option value="">-- None --</option>
+                    {lookups.departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                  </select>
+                </div>
+
+                <div className="pt-2">
+                  <label className="text-xs font-semibold text-slate-600 mb-1 block">System Role *</label>
+                  <select value={formData.mainRole} onChange={e => setFormData({...formData, mainRole: e.target.value})} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 outline-none bg-white text-sm">
+                    <option value="ROLE_TEACHER">Teacher</option>
+                    <option value="ROLE_TRANSPORT">Transport</option>
+                  </select>
+                </div>
+
+                {formData.mainRole === 'ROLE_TEACHER' && (
+                  <div className="pt-2 space-y-4">
+                    <div>
+                      <label className="text-sm font-bold text-slate-900 mb-2 block">Teacher Sub-Roles:</label>
+                      <div className="space-y-2 pl-2">
+                        {['HOD', 'CC', 'Discipline Commitee', 'Lab instructor', 'PET'].map(subRole => (
+                          <label key={subRole} className="flex items-center space-x-3 text-sm text-slate-700 cursor-pointer">
+                            <input 
+                              type="checkbox" 
+                              checked={formData.subRoles.includes(subRole)}
+                              onChange={() => toggleSubRole(subRole)}
+                              className="rounded border-slate-300 text-slate-900 focus:ring-slate-900 h-4 w-4"
+                            />
+                            <span>{subRole}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    {formData.subRoles.includes('CC') && (
+                      <div className="space-y-4 pl-6 border-l-2 border-slate-200 py-2 mt-2">
+                        <div>
+                          <label className="text-xs font-semibold text-slate-600 mb-1 block">Coordinator Year *</label>
+                          <select value={formData.year} onChange={e => setFormData({...formData, year: e.target.value})} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 outline-none bg-white text-sm">
+                            <option value="">-- Select --</option>
+                            <option value="I">I Year</option>
+                            <option value="II">II Year</option>
+                            <option value="III">III Year</option>
+                            <option value="IV">IV Year</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-xs font-semibold text-slate-600 mb-1 block">Coordinator Section *</label>
+                          <input type="text" placeholder="e.g. A" value={formData.section} onChange={e => setFormData({...formData, section: e.target.value})} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 outline-none text-sm" />
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="pt-2">
+                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Subject Specialization:</label>
+                      <div className="space-y-2 pl-2">
+                        {lookups.subjects.length > 0 ? lookups.subjects.map(s => (
+                          <label key={s.id} className="flex items-center space-x-3 text-sm text-slate-700 cursor-pointer">
+                            <input 
+                              type="checkbox" 
+                              checked={formData.subjectIds.includes(s.id)}
+                              onChange={() => toggleSubject(s.id)}
+                              className="rounded border-slate-300 text-slate-900 focus:ring-slate-900 h-4 w-4"
+                            />
+                            <span>{s.name}</span>
+                          </label>
+                        )) : (
+                          <div className="text-xs text-slate-400 italic">No subjects configured. Add subjects under 'Manage Subjects'.</div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              <div className="flex justify-end space-x-3 pt-4">
+                <button type="button" onClick={() => setIsModalOpen(false)} className="px-5 py-2 text-slate-500 font-semibold hover:bg-slate-100 rounded-lg transition-colors">
+                  Cancel
+                </button>
+                <button type="submit" className="px-6 py-2 bg-[#EA4335] text-white font-semibold rounded-lg hover:bg-red-600 transition-colors">
+                  {editingUser ? 'Save' : 'Create'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={deleteConfirmModal.open}
+        title="Delete User"
+        description={`Are you sure you want to delete "${deleteConfirmModal.username}"? This action cannot be undone.`}
+        confirmText="Delete User"
+        cancelText="Cancel"
+        isDangerous={true}
+        onConfirm={confirmDeleteUser}
+        onCancel={() => setDeleteConfirmModal({ open: false, userId: null, username: '' })}
+      />
+    </div>
+  );
+}
